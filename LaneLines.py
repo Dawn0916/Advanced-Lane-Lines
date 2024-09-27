@@ -85,7 +85,9 @@ class LaneLines:
         """
         self.img = img
         # Height of of windows - based on nwindows and image shape
-        self.window_height = np.int(img.shape[0]//self.nwindows)
+        self.window_height = np.int32(img.shape[0]//self.nwindows)
+        #self.window_height = int(img.shape[0] // self.nwindows)
+
 
         # Identify the x and y positions of all nonzero pixel in the image
         self.nonzero = img.nonzero()
@@ -144,61 +146,176 @@ class LaneLines:
                 rightx_current = np.int32(np.mean(good_right_x))
 
         return leftx, lefty, rightx, righty, out_img
+    
 
     def fit_poly(self, img):
-        """Find the lane line from an image and draw it.
-
-        Parameters:
-            img (np.array): a binary warped image
-
-        Returns:
-            out_img (np.array): a RGB image that have lane line drawn on that.
-        """
-
+        """Find the lane line from an image and draw it."""
+        
         leftx, lefty, rightx, righty, out_img = self.find_lane_pixels(img)
 
+        # Fit polynomial if we have enough points
         if len(lefty) > 1500:
             self.left_fit = np.polyfit(lefty, leftx, 2)
+        else:
+            self.left_fit = None  # No fit found
+
         if len(righty) > 1500:
             self.right_fit = np.polyfit(righty, rightx, 2)
+        else:
+            self.right_fit = None  # No fit found
 
-        # Generate x and y values for plotting
-        maxy = img.shape[0] - 1
-        miny = img.shape[0] // 3
-        if len(lefty):
-            maxy = max(maxy, np.max(lefty))
-            miny = min(miny, np.min(lefty))
+        # Generate y-values for plotting
+        ploty = np.linspace(0, img.shape[0] - 1, img.shape[0])
 
-        if len(righty):
-            maxy = max(maxy, np.max(righty))
-            miny = min(miny, np.min(righty))
+        # Initialize left_fitx and right_fitx as None
+        left_fitx, right_fitx = None, None
 
-        ploty = np.linspace(miny, maxy, img.shape[0])
+        # Compute left and right fit x-values if fit was successful
+        if self.left_fit is not None:
+            left_fitx = self.left_fit[0] * ploty**2 + self.left_fit[1] * ploty + self.left_fit[2]
 
-        left_fitx = self.left_fit[0]*ploty**2 + self.left_fit[1]*ploty + self.left_fit[2]
-        right_fitx = self.right_fit[0]*ploty**2 + self.right_fit[1]*ploty + self.right_fit[2]
+        if self.right_fit is not None:
+            right_fitx = self.right_fit[0] * ploty**2 + self.right_fit[1] * ploty + self.right_fit[2]
 
         # Visualization
-        for i, y in enumerate(ploty):
-            l = int(left_fitx[i])
-            r = int(right_fitx[i])
-            y = int(y)
-            cv2.line(out_img, (l, y), (r, y), (0, 255, 0))
-
-        lR, rR, pos = self.measure_curvature()
+        if left_fitx is not None and right_fitx is not None:
+            for i, y in enumerate(ploty):
+                l = int(left_fitx[i])
+                r = int(right_fitx[i])
+                y = int(y)
+                cv2.line(out_img, (l, y), (r, y), (0, 255, 0), 5)
 
         return out_img
+
+
+
+    # def fit_poly(self, img):
+    #     """Find the lane line from an image and draw it.
+
+    #     Parameters:
+    #         img (np.array): a binary warped image
+
+    #     Returns:
+    #         out_img (np.array): a RGB image that have lane line drawn on that.
+    #     """
+
+    #     leftx, lefty, rightx, righty, out_img = self.find_lane_pixels(img)
+
+    #     if len(lefty) > 1500:
+    #         self.left_fit = np.polyfit(lefty, leftx, 2)
+    #     if len(righty) > 1500:
+    #         self.right_fit = np.polyfit(righty, rightx, 2)
+
+    #     # Generate x and y values for plotting
+    #     maxy = img.shape[0] - 1
+    #     miny = img.shape[0] // 3
+    #     if len(lefty):
+    #         maxy = max(maxy, np.max(lefty))
+    #         miny = min(miny, np.min(lefty))
+
+    #     if len(righty):
+    #         maxy = max(maxy, np.max(righty))
+    #         miny = min(miny, np.min(righty))
+
+    #     ploty = np.linspace(miny, maxy, img.shape[0])
+
+    #     left_fitx = self.left_fit[0]*ploty**2 + self.left_fit[1]*ploty + self.left_fit[2]
+    #     right_fitx = self.right_fit[0]*ploty**2 + self.right_fit[1]*ploty + self.right_fit[2]
+
+    #     # Visualization
+    #     for i, y in enumerate(ploty):
+    #         l = int(left_fitx[i])
+    #         r = int(right_fitx[i])
+    #         y = int(y)
+    #         cv2.line(out_img, (l, y), (r, y), (0, 255, 0))
+
+    #     lR, rR, pos = self.measure_curvature()
+
+    #     return out_img
+
+    # def plot(self, out_img):
+    #     np.set_printoptions(precision=6, suppress=True)
+    #     lR, rR, pos = self.measure_curvature()
+
+    #     value = None
+    #     if abs(self.left_fit[0]) > abs(self.right_fit[0]):
+    #         value = self.left_fit[0]
+    #     else:
+    #         value = self.right_fit[0]
+
+    #     if abs(value) <= 0.00015:
+    #         self.dir.append('F')
+    #     elif value < 0:
+    #         self.dir.append('L')
+    #     else:
+    #         self.dir.append('R')
+        
+    #     if len(self.dir) > 10:
+    #         self.dir.pop(0)
+
+    #     W = 400
+    #     H = 500
+    #     widget = np.copy(out_img[:H, :W])
+    #     widget //= 2
+    #     widget[0,:] = [0, 0, 255]
+    #     widget[-1,:] = [0, 0, 255]
+    #     widget[:,0] = [0, 0, 255]
+    #     widget[:,-1] = [0, 0, 255]
+    #     out_img[:H, :W] = widget
+
+    #     direction = max(set(self.dir), key = self.dir.count)
+    #     msg = "Keep Straight Ahead"
+    #     curvature_msg = "Curvature = {:.0f} m".format(min(lR, rR))
+    #     if direction == 'L':
+    #         y, x = self.left_curve_img[:,:,3].nonzero()
+    #         out_img[y, x-100+W//2] = self.left_curve_img[y, x, :3]
+    #         msg = "Left Curve Ahead"
+    #     if direction == 'R':
+    #         y, x = self.right_curve_img[:,:,3].nonzero()
+    #         out_img[y, x-100+W//2] = self.right_curve_img[y, x, :3]
+    #         msg = "Right Curve Ahead"
+    #     if direction == 'F':
+    #         y, x = self.keep_straight_img[:,:,3].nonzero()
+    #         out_img[y, x-100+W//2] = self.keep_straight_img[y, x, :3]
+
+    #     cv2.putText(out_img, msg, org=(10, 240), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255, 255, 255), thickness=2)
+    #     if direction in 'LR':
+    #         cv2.putText(out_img, curvature_msg, org=(10, 280), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255, 255, 255), thickness=2)
+
+    #     cv2.putText(
+    #         out_img,
+    #         "Good Lane Keeping",
+    #         org=(10, 400),
+    #         fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+    #         fontScale=1.2,
+    #         color=(0, 255, 0),
+    #         thickness=2)
+
+    #     cv2.putText(
+    #         out_img,
+    #         "Vehicle is {:.2f} m away from center".format(pos),
+    #         org=(10, 450),
+    #         fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+    #         fontScale=0.66,
+    #         color=(255, 255, 255),
+    #         thickness=2)
+
+    #     return out_img
 
     def plot(self, out_img):
         np.set_printoptions(precision=6, suppress=True)
         lR, rR, pos = self.measure_curvature()
 
-        value = None
-        if abs(self.left_fit[0]) > abs(self.right_fit[0]):
-            value = self.left_fit[0]
+        # Check if self.left_fit and self.right_fit are not None before accessing them
+        if self.left_fit is not None and self.right_fit is not None:
+            if abs(self.left_fit[0]) > abs(self.right_fit[0]):
+                value = self.left_fit[0]
+            else:
+                value = self.right_fit[0]
         else:
-            value = self.right_fit[0]
+            value = 0  # Default value if fits are not available
 
+        # Determine the direction based on the value
         if abs(value) <= 0.00015:
             self.dir.append('F')
         elif value < 0:
@@ -206,22 +323,27 @@ class LaneLines:
         else:
             self.dir.append('R')
         
+        # Ensure the direction list doesn't grow indefinitely
         if len(self.dir) > 10:
             self.dir.pop(0)
 
+        # Initialize widget dimensions
         W = 400
         H = 500
         widget = np.copy(out_img[:H, :W])
         widget //= 2
-        widget[0,:] = [0, 0, 255]
+        widget[0,:] = [0, 0, 255]  # Red border
         widget[-1,:] = [0, 0, 255]
         widget[:,0] = [0, 0, 255]
         widget[:,-1] = [0, 0, 255]
         out_img[:H, :W] = widget
 
-        direction = max(set(self.dir), key = self.dir.count)
+        # Determine the direction (most frequent in the last few frames)
+        direction = max(set(self.dir), key=self.dir.count)
         msg = "Keep Straight Ahead"
         curvature_msg = "Curvature = {:.0f} m".format(min(lR, rR))
+
+        # Add direction-specific images and messages
         if direction == 'L':
             y, x = self.left_curve_img[:,:,3].nonzero()
             out_img[y, x-100+W//2] = self.left_curve_img[y, x, :3]
@@ -234,10 +356,12 @@ class LaneLines:
             y, x = self.keep_straight_img[:,:,3].nonzero()
             out_img[y, x-100+W//2] = self.keep_straight_img[y, x, :3]
 
+        # Add text messages to the image
         cv2.putText(out_img, msg, org=(10, 240), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255, 255, 255), thickness=2)
         if direction in 'LR':
             cv2.putText(out_img, curvature_msg, org=(10, 280), fontFace=cv2.FONT_HERSHEY_SIMPLEX, fontScale=1, color=(255, 255, 255), thickness=2)
 
+        # Display good lane keeping message
         cv2.putText(
             out_img,
             "Good Lane Keeping",
@@ -247,6 +371,7 @@ class LaneLines:
             color=(0, 255, 0),
             thickness=2)
 
+        # Display vehicle position message
         cv2.putText(
             out_img,
             "Vehicle is {:.2f} m away from center".format(pos),
@@ -258,12 +383,38 @@ class LaneLines:
 
         return out_img
 
-    def measure_curvature(self):
-        ym = 30/720
-        xm = 3.7/700
 
+    # def measure_curvature(self):
+    #     ym = 30/720
+    #     xm = 3.7/700
+
+    #     left_fit = self.left_fit.copy()
+    #     right_fit = self.right_fit.copy()
+    #     y_eval = 700 * ym
+
+    #     # Compute R_curve (radius of curvature)
+    #     left_curveR =  ((1 + (2*left_fit[0] *y_eval + left_fit[1])**2)**1.5)  / np.absolute(2*left_fit[0])
+    #     right_curveR = ((1 + (2*right_fit[0]*y_eval + right_fit[1])**2)**1.5) / np.absolute(2*right_fit[0])
+
+    #     xl = np.dot(self.left_fit, [700**2, 700, 1])
+    #     xr = np.dot(self.right_fit, [700**2, 700, 1])
+    #     pos = (1280//2 - (xl+xr)//2)*xm
+    #     return left_curveR, right_curveR, pos 
+    
+
+    def measure_curvature(self):
+        """Calculates the curvature of the lane and vehicle position."""
+
+        # Return 0 curvature and position if no fit is available
+        if self.left_fit is None or self.right_fit is None:
+            return 0, 0, 0
+
+        # Calculate curvature assuming valid fits
         left_fit = self.left_fit.copy()
         right_fit = self.right_fit.copy()
+
+        ym = 30/720
+        xm = 3.7/700
         y_eval = 700 * ym
 
         # Compute R_curve (radius of curvature)
@@ -273,4 +424,6 @@ class LaneLines:
         xl = np.dot(self.left_fit, [700**2, 700, 1])
         xr = np.dot(self.right_fit, [700**2, 700, 1])
         pos = (1280//2 - (xl+xr)//2)*xm
-        return left_curveR, right_curveR, pos 
+
+        return left_curveR, right_curveR, pos
+
